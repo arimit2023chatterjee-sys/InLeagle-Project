@@ -1,3 +1,29 @@
+# For Local vectorstore retrieval using Qdrant and HuggingFaceEmbeddings
+
+# QDRANT_URL      = os.getenv("QDRANT_URL", "http://localhost:6333")
+# COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "InLegalDocs")
+# MODEL_NAME      = os.getenv("EMBEDDING_MODEL", "bhavyagiri/InLegal-Sbert")
+# TOP_K           = 5 
+
+# def get_embeddings() -> HuggingFaceEmbeddings:
+#     global _embeddings
+#     if _embeddings is None:
+#         log.info(f"Loading embedding model: {MODEL_NAME}")
+#         _embeddings = HuggingFaceEmbeddings(
+#             model_name=MODEL_NAME,
+#             model_kwargs={"device": "cpu"},
+#             encode_kwargs={"normalize_embeddings": True},
+#         )
+#     return _embeddings
+
+# def get_client() -> QdrantClient:
+#     global _client
+#     if _client is None:
+#         _client = QdrantClient(url=QDRANT_URL)
+#         log.info(f"Qdrant connected: {QDRANT_URL}")
+#     return _client
+
+
 """ No LangChain wrapper here as directly Qdrant client gives us
 full control over filtering and scoring.
 """
@@ -10,7 +36,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
-from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 log = logging.getLogger("retrieval")
@@ -31,18 +57,17 @@ TOP_K           = 5   # number of chunks to retrieve per query
 # Load model and client once — reused across all queries
 # ─────────────────────────────────────────────────────────────
 
-_embeddings: Optional[HuggingFaceEmbeddings] = None
+_embeddings: Optional[SentenceTransformer] = None
 _client: Optional[QdrantClient] = None
 
 
-def get_embeddings() -> HuggingFaceEmbeddings:
+def get_embeddings() -> SentenceTransformer:
     global _embeddings
     if _embeddings is None:
         log.info(f"Loading embedding model: {MODEL_NAME}")
-        _embeddings = HuggingFaceEmbeddings(
-            model_name=MODEL_NAME,
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True},
+        _embeddings = SentenceTransformer(
+            MODEL_NAME,
+            cache_folder=os.getenv("HF_HOME", "/app/hf_cache")
         )
     return _embeddings
 
@@ -52,7 +77,8 @@ def get_client() -> QdrantClient:
     if _client is None:
         _client = QdrantClient(
             url=QDRANT_URL,
-            api_key=QDRANT_API_KEY if QDRANT_API_KEY else None)
+            api_key=QDRANT_API_KEY if QDRANT_API_KEY else None,
+            timeout=30)
         log.info(f"Qdrant connected: {QDRANT_URL}")
     return _client
 
@@ -81,7 +107,7 @@ def search(
     client     = get_client()
 
     # Embed the query
-    query_vector = embeddings.embed_query(query)
+    query_vector = embeddings.encode(query, normalize_embeddings=True).tolist()
 
     # Build optional metadata filter
     qdrant_filter = None

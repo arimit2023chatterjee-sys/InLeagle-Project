@@ -25,6 +25,7 @@ tmp/
 # Model cache
 .cache/
 models/
+hf_cache/
 
 # IDE
 .vscode/
@@ -40,3 +41,5 @@ aliases/
 *.log
 logs/
 .pytest_cache/
+Questions.md
+Qestions.md

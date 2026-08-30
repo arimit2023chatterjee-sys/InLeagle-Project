@@ -1,7 +1,4 @@
-# ─────────────────────────────────────────────────────────────
-# IMPORTS
-# ─────────────────────────────────────────────────────────────
-
+import os
 import re
 import logging
 import argparse
@@ -39,8 +36,9 @@ CHUNK_OVERLAP = 80
 MIN_CHUNK_LEN = 80
 
 # Qdrant
-QDRANT_URL      = "http://localhost:6333"
-COLLECTION_NAME = "InLegalDocs"
+QDRANT_URL      = os.getenv("QDRANT_CLOUD_CLUSTER_URL") or os.getenv("QDRANT_URL") or "http://localhost:6333"
+QDRANT_API_KEY  = os.getenv("QDRANT_CLOUD_API_KEY") or ""
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION") or "InLegalDocs"
 
 # Embedding model
 # bhavyagiri/InLegal-Sbert is a sentence-transformer variant of InLegalBERT
@@ -422,7 +420,9 @@ def ingest_one(
         embedding=embeddings,
         collection_name=COLLECTION_NAME,
         url=QDRANT_URL,
+        api_key=QDRANT_API_KEY if QDRANT_API_KEY else None,
         prefer_grpc=False,
+        timeout=60, 
     )
 
     log.info(f" Done — {len(lc_docs)} chunks stored")

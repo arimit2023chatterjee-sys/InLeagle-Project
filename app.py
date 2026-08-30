@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 sys.path.append(str(Path(__file__).parent))
 from pipeline.rag_pipeline import ask
+from retrieval.vectorstore import get_client
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s  %(levelname)-8s  %(message)s")
@@ -33,10 +34,15 @@ app.add_middleware(
 
 # ── Schemas ──────────────────────────────────────────────────
 
+class Message(BaseModel):
+    role:    str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., min_length=1)
+
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=5, max_length=1000)
-    mode:  str = Field(default="auto", pattern="^(auto|layman|legal)$")
-    top_k: int = Field(default=5, ge=1, le=10)
+    query:   str = Field(..., min_length=5, max_length=1000)
+    mode:    str = Field(default="auto", pattern="^(auto|layman|legal)$")
+    top_k:   int = Field(default=5, ge=1, le=10)
+    history: list[Message] = Field(default=[])
 
 class SourceChunk(BaseModel):
     document_name: str
@@ -56,15 +62,32 @@ class QueryResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "Indian Banking Legal AI"}
+    try:
+        client = get_client()
+        client.get_collections()
+        qdrant_status = "connected"
+    except Exception as e:
+        log.error(f"Qdrant health check failed: {e}")
+        qdrant_status = f"error: {str(e)}"
+
+    return {
+        "status": "ok",
+        "service": "Indian Banking Legal AI",
+        "qdrant": qdrant_status
+    }
 
 
 @app.post("/query", response_model=QueryResponse)
 def query_endpoint(request: QueryRequest):
     log.info(f"Query [{request.mode}]: {request.query[:80]}")
 
-    result = ask(query=request.query.strip(),
-                 mode=request.mode, top_k=request.top_k)
+    history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
+    result = ask(
+        query=request.query.strip(),
+        mode=request.mode,
+        top_k=request.top_k,
+        history=history_dicts
+    )
 
     if result.get("error"):
         raise HTTPException(status_code=500, detail=result["error"])
